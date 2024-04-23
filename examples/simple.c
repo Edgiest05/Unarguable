@@ -4,7 +4,7 @@
 #include "unarguable.h"
 
 int main(int argc, const char *argv[]) {
-    UA_Parser *parser = ua_create_parser();
+    UA_Parser *parser = ua_parser_create();
     UA_Argument *arg;
     UA_ArgValues *argValue;
     const char *wrongArg = NULL;

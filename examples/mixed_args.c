@@ -4,7 +4,7 @@
 #include "unarguable.h"
 
 int main(int argc, char const *argv[]) {
-    UA_Parser *parser = ua_create_parser();
+    UA_Parser *parser = ua_parser_create();
     UA_Argument *arg;
     const char *wrongArg = NULL;
 
@@ -27,7 +27,7 @@ int main(int argc, char const *argv[]) {
     arg = ua_parser_get_argument(parser, "directory");
     UA_PRINT_ARGUMENT(arg, "directory");
     UA_PRINT_ARGUMENT_VALUE(arg, "directory");
-    
+
     if ((wrongArg = ua_parser_is_complete(parser)) != NULL) {
         fprintf(stderr, "First wrong argument is: '%s'\n", wrongArg);
     }
