@@ -59,6 +59,8 @@ size_t ua_hash_string(const char *const str) {
 
 /*  End of structures definition */
 
+#define UAAPI
+
 typedef enum UA_Argument_Type {
     UA_ARGUMENT_SHORT,
     UA_ARGUMENT_LONG,
@@ -113,16 +115,19 @@ typedef struct UA_Parser {
 #define UA_PRINT_ARGUMENT_VALUE(argPtr, id) \
     printf("VALUE(%s) -> found: %d, consumes: %lu, length: %lu\n", (id), (argPtr)->values.isActive, (unsigned long)(argPtr)->consumes, (unsigned long)(argPtr)->values.allocated)
 
-UA_Parser *ua_create_parser();
-void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired);
-UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name);
-UA_ArgValues *ua_argument_get_values(UA_Argument *argument);
-bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const argv[]); /* // ! Only supports prefixed identifiers (-, --) */
-const char *ua_parser_is_complete(const UA_Parser *parser);                               /* // TODO: Does this signature make sense? */
+UAAPI UA_Parser *ua_parser_create();
+UAAPI void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired);
+UAAPI UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name);
+UAAPI bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const argv[]); /* // ! Only supports prefixed identifiers (-, --) */
+UAAPI const char *ua_parser_is_complete(const UA_Parser *parser);                               /* // TODO: Does this signature make sense? */
 
+UAAPI void ua_argument_set_consumes(UA_Argument *argument, size_t consumes);
+UAAPI void ua_argument_set_required(UA_Argument *argument, bool isRequired);
+UAAPI UA_ArgValues *ua_argument_get_values(UA_Argument *argument);
+UAAPI void ua_argument_set_active(UA_Argument *argument, bool isActive);
 
 #ifdef UNARGUABLE_IMPLEMENTATION
-UA_Parser *ua_create_parser() {
+UA_Parser *ua_parser_create() {
     return calloc(1, sizeof(UA_Parser));
 }
 
@@ -190,8 +195,20 @@ UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name) {
     return argIdx == SIZE_MAX ? NULL : &parser->argumentStack.items[argIdx];
 }
 
+void ua_argument_set_consumes(UA_Argument *argument, size_t consumes) {
+    argument->consumes = consumes;
+}
+
+void ua_argument_set_required(UA_Argument *argument, bool isRequired) {
+    argument->isRequired = isRequired;
+}
+
 UA_ArgValues *ua_argument_get_values(UA_Argument *argument) {
     return &argument->values;
+}
+
+void ua_argument_set_active(UA_Argument *argument, bool isActive) {
+    ua_argument_get_values(argument)->isActive = isActive;
 }
 
 /* // ! Only supports prefixed identifiers (-, --) */
