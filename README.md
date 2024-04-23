@@ -18,10 +18,10 @@ Using a `UA_Parser` one can define needed arguments and manage their traits (sim
 #define UNARGUABLE_IMPLEMENTATION
 #include "unarguable.h"
 
-int main(int argc, char const *argv[]) {
+int main(int argc, const char *argv[]) {
     UA_Parser *parser = ua_create_parser();
     UA_Argument *arg;
-    UA_ArgValue *argValue;
+    UA_ArgValues *argValue;
     const char *wrongArg = NULL;
 
     ua_parser_add_argument(parser, UA_ARGUMENT_BOTH, "s", "save", 1, true);
@@ -35,7 +35,7 @@ int main(int argc, char const *argv[]) {
         return 1;
     }
 
-    argValue = ua_parser_get_argvalue(parser, arg);
+    argValue = ua_argument_get_values(arg);
     printf("Argument --save is: %s\n", argValue->items[0]);
 
     return 0;

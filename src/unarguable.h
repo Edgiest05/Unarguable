@@ -70,19 +70,19 @@ typedef enum UA_Argument_Type {
         UA_ARGUMENT_STRING_TYPE
     } UA_Argument_DataType; */
 
-typedef struct UA_DA_ArgumentValue {
+typedef struct UA_ArgValues {
     const char **items;
     size_t allocated;
     size_t capacity;
     bool isActive;
-} UA_ArgValue;
+} UA_ArgValues;
 
 typedef struct UA_Argument {
     UA_Argument_Type type;
     char *shortName;
     char *longName;
     size_t consumes;
-    size_t valueIdx; /*  References to elements inside arg value stack */
+    UA_ArgValues values;
     bool isRequired;
 } UA_Argument;
 
@@ -100,11 +100,6 @@ typedef struct UA_Parser {
         size_t allocated;
         size_t capacity;
     } argumentStack;
-    struct UA_Argument_Values_Stack {
-        UA_ArgValue *items;
-        size_t allocated;
-        size_t capacity;
-    } argumentValuesStack;
 
     /*  From string of argument name to index of argument in argument stack */
     struct UA_Argument_Map {
@@ -113,26 +108,22 @@ typedef struct UA_Parser {
 } UA_Parser;
 
 #define UA_PRINT_ARGUMENT(argPtr, id) \
-    printf("ARGUMENT(%s) -> type: %d, short: %s, long: %s, consumes: %lu, values: %lu, required: %d\n", (id), (argPtr)->type, (argPtr)->shortName, (argPtr)->longName, (unsigned long)(argPtr)->consumes, (unsigned long)(argPtr)->valueIdx, (argPtr)->isRequired)
+    printf("ARGUMENT(%s) -> type: %d, short: %s, long: %s, consumes: %lu, required: %d\n", (id), (argPtr)->type, (argPtr)->shortName, (argPtr)->longName, (unsigned long)(argPtr)->consumes, (argPtr)->isRequired)
 
-#define UA_PRINT_ARGUMENT_VALUE(parserPtr, argPtr, id) \
-    printf("VALUE(%s) -> found: %d, consumes: %lu, location: %lu, length: %lu\n", (id), (parserPtr)->argumentValuesStack.items[(argPtr)->valueIdx].isActive, (unsigned long)(argPtr)->consumes, (unsigned long)(argPtr)->valueIdx, (unsigned long)(parserPtr)->argumentValuesStack.items[(argPtr)->valueIdx].allocated)
+#define UA_PRINT_ARGUMENT_VALUE(argPtr, id) \
+    printf("VALUE(%s) -> found: %d, consumes: %lu, length: %lu\n", (id), (argPtr)->values.isActive, (unsigned long)(argPtr)->consumes, (unsigned long)(argPtr)->values.allocated)
 
 UA_Parser *ua_create_parser();
 void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired);
 UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name);
+UA_ArgValues *ua_argument_get_values(UA_Argument *argument);
 bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const argv[]); /* // ! Only supports prefixed identifiers (-, --) */
 const char *ua_parser_is_complete(const UA_Parser *parser);                               /* // TODO: Does this signature make sense? */
+
 
 #ifdef UNARGUABLE_IMPLEMENTATION
 UA_Parser *ua_create_parser() {
     return calloc(1, sizeof(UA_Parser));
-}
-
-size_t _ua_parser_create_argvalue(UA_Parser *parser) {
-    UA_ArgValue value = {0};
-    UA_DA_APPEND(&parser->argumentValuesStack, value);
-    return parser->argumentValuesStack.allocated - 1;
 }
 
 void _ua_parser_map_add_helper(UA_Parser *parser, const char *const keyPtr, size_t value) {
@@ -168,7 +159,6 @@ size_t _ua_parser_map_find(UA_Parser *parser, const char *const name) {
 void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired) {
     size_t shortNameSize, longNameSize;
     char *newShortName = NULL, *newLongName = NULL;
-    size_t newValueIdx = 0;
     UA_Argument new = {0};
 
     if (argType != UA_ARGUMENT_LONG) {
@@ -185,13 +175,10 @@ void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const c
         assert(longNameSize - 1 > 1 && "Invalid long name length");
     }
 
-    newValueIdx = _ua_parser_create_argvalue(parser);
-
     new.type = argType;
     new.shortName = newShortName;
     new.longName = newLongName;
     new.consumes = elementsCounsumed;
-    new.valueIdx = newValueIdx;
     new.isRequired = isArgRequired;
     UA_DA_APPEND(&parser->argumentStack, new);
 
@@ -203,8 +190,9 @@ UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name) {
     return argIdx == SIZE_MAX ? NULL : &parser->argumentStack.items[argIdx];
 }
 
-#define ua_parser_get_argvalue(parserPtr, argumentPtr) \
-    (&(parserPtr)->argumentValuesStack.items[(argumentPtr)->valueIdx])
+UA_ArgValues *ua_argument_get_values(UA_Argument *argument) {
+    return &argument->values;
+}
 
 /* // ! Only supports prefixed identifiers (-, --) */
 bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const argv[]) {
@@ -227,7 +215,7 @@ bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const
                     if (cur == NULL) return false;
                     /* // TODO: Argument consumption is not possible with compund */
                     if (cur->consumes > 0) return false;
-                    ua_parser_get_argvalue(parser, cur)->isActive = true;
+                    ua_argument_get_values(cur)->isActive = true;
                 }
                 i++;
                 continue;
@@ -241,11 +229,11 @@ bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const
             i++;
             continue;
         }
-        ua_parser_get_argvalue(parser, cur)->isActive = true;
+        ua_argument_get_values(cur)->isActive = true;
         i++;
         for (_ = 0; _ < cur->consumes; _++) {
             if (i >= argc) return false;
-            UA_DA_APPEND(ua_parser_get_argvalue(parser, cur), argv[i]);
+            UA_DA_APPEND(ua_argument_get_values(cur), argv[i]);
             i++;
         }
     }
@@ -254,12 +242,12 @@ bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const
 
 const char *ua_parser_is_complete(const UA_Parser *parser) {
     UA_Argument *cur = NULL;
-    UA_ArgValue *curValue = NULL;
+    UA_ArgValues *curValue = NULL;
 
     size_t i;
     for (i = 0; i < parser->argumentStack.allocated; i++) {
         cur = &parser->argumentStack.items[i];
-        curValue = ua_parser_get_argvalue(parser, cur);
+        curValue = ua_argument_get_values(cur);
         if (cur->isRequired && !curValue->isActive) goto defer;
         if (curValue->isActive && (cur->consumes != curValue->allocated)) goto defer;
     }

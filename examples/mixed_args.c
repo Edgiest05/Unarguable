@@ -17,16 +17,16 @@ int main(int argc, char const *argv[]) {
 
     arg = ua_parser_get_argument(parser, "s");
     UA_PRINT_ARGUMENT(arg, "s");
-    UA_PRINT_ARGUMENT_VALUE(parser, arg, "s");
+    UA_PRINT_ARGUMENT_VALUE(arg, "s");
     arg = ua_parser_get_argument(parser, "save");
     UA_PRINT_ARGUMENT(arg, "save");
-    UA_PRINT_ARGUMENT_VALUE(parser, arg, "save");
+    UA_PRINT_ARGUMENT_VALUE(arg, "save");
     arg = ua_parser_get_argument(parser, "a");
     UA_PRINT_ARGUMENT(arg, "a");
-    UA_PRINT_ARGUMENT_VALUE(parser, arg, "a");
+    UA_PRINT_ARGUMENT_VALUE(arg, "a");
     arg = ua_parser_get_argument(parser, "directory");
     UA_PRINT_ARGUMENT(arg, "directory");
-    UA_PRINT_ARGUMENT_VALUE(parser, arg, "directory");
+    UA_PRINT_ARGUMENT_VALUE(arg, "directory");
     
     if ((wrongArg = ua_parser_is_complete(parser)) != NULL) {
         fprintf(stderr, "First wrong argument is: '%s'\n", wrongArg);
