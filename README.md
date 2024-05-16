@@ -6,7 +6,7 @@
 ![GitHub License](https://img.shields.io/github/license/Edgiest05/Unarguable?label=License)
 ![GitHub Release](https://img.shields.io/github/v/release/Edgiest05/Unarguable?label=Latest%20Release)
 
-This repository provides a **single source file** to seamlessly manage command line arguments, compliant with the most widely compatible [C90 standard](https://en.wikipedia.org/wiki/ANSI_C#C90).
+This repository provides a **single source file** to seamlessly manage command line arguments, compliant with the most widely compatible [C90](https://en.wikipedia.org/wiki/ANSI_C#C90) and [C++11](https://it.wikipedia.org/wiki/C%2B%2B11) standards.
 
 Using a `UA_Parser` one can define needed arguments and manage their traits (simple flag, required argument, multiple parameters, etc) and ultimately check if parsing is successful and retrieve stored values.
 

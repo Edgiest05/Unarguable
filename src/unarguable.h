@@ -6,35 +6,39 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if !__cplusplus
+#define decltype(type) void*
+#endif
+
 #define UA_ARR_LEN(array) (sizeof(array) / sizeof(array[0]))
 
 /*  Dynamic Arrays */
 
 #define UA_DA_INIT_CAP 4
 
-#define UA_DA_APPEND(daPtr, elem)                                                                  \
-    do {                                                                                           \
-        if ((daPtr)->count >= (daPtr)->capacity) {                                             \
-            (daPtr)->capacity = (daPtr)->capacity == 0 ? UA_DA_INIT_CAP : (daPtr)->capacity * 2;   \
-            (daPtr)->items = realloc((daPtr)->items, (daPtr)->capacity * sizeof(*(daPtr)->items)); \
-            assert((daPtr)->items != NULL && "Buy more RAM lol");                                  \
-        }                                                                                          \
-                                                                                                   \
-        (daPtr)->items[(daPtr)->count++] = (elem);                                             \
+#define UA_DA_APPEND(daPtr, elem)                                                                                            \
+    do {                                                                                                                     \
+        if ((daPtr)->count >= (daPtr)->capacity) {                                                                           \
+            (daPtr)->capacity = (daPtr)->capacity == 0 ? UA_DA_INIT_CAP : (daPtr)->capacity * 2;                             \
+            (daPtr)->items = (decltype((daPtr)->items))realloc((daPtr)->items, (daPtr)->capacity * sizeof(*(daPtr)->items)); \
+            assert((daPtr)->items != NULL && "Buy more RAM lol");                                                            \
+        }                                                                                                                    \
+                                                                                                                             \
+        (daPtr)->items[(daPtr)->count++] = (elem);                                                                           \
     } while (0)
 
-#define UA_DA_APPEND_MANY(daPtr, new_items, new_items_count)                                               \
-    do {                                                                                                   \
+#define UA_DA_APPEND_MANY(daPtr, new_items, new_items_count)                                           \
+    do {                                                                                               \
         if ((daPtr)->count + new_items_count > (daPtr)->capacity) {                                    \
-            if ((daPtr)->capacity == 0) {                                                                  \
-                (daPtr)->capacity = UA_DA_INIT_CAP;                                                        \
-            }                                                                                              \
+            if ((daPtr)->capacity == 0) {                                                              \
+                (daPtr)->capacity = UA_DA_INIT_CAP;                                                    \
+            }                                                                                          \
             while ((daPtr)->count + new_items_count > (daPtr)->capacity) {                             \
-                (daPtr)->capacity *= 2;                                                                    \
-            }                                                                                              \
-            (daPtr)->items = realloc((daPtr)->items, (daPtr)->capacity * sizeof(*(daPtr)->items));         \
-            assert((daPtr)->items != NULL && "Buy more RAM lol");                                          \
-        }                                                                                                  \
+                (daPtr)->capacity *= 2;                                                                \
+            }                                                                                          \
+            (daPtr)->items = (decltype((daPtr)->items))realloc((daPtr)->items, (daPtr)->capacity * sizeof(*(daPtr)->items));     \
+            assert((daPtr)->items != NULL && "Buy more RAM lol");                                      \
+        }                                                                                              \
         memcpy((daPtr)->items + (daPtr)->count, new_items, new_items_count * sizeof(*(daPtr)->items)); \
         (daPtr)->count += new_items_count;                                                             \
     } while (0)
@@ -128,7 +132,7 @@ UAAPI void ua_argument_set_active(UA_Argument *argument, bool isActive);
 
 #ifdef UNARGUABLE_IMPLEMENTATION
 UA_Parser *ua_parser_create() {
-    return calloc(1, sizeof(UA_Parser));
+    return (UA_Parser *)calloc(1, sizeof(UA_Parser));
 }
 
 void _ua_parser_map_add_helper(UA_Parser *parser, const char *const keyPtr, size_t value) {
@@ -138,7 +142,7 @@ void _ua_parser_map_add_helper(UA_Parser *parser, const char *const keyPtr, size
     while (*cur != NULL) {
         *cur = (*cur)->next;
     }
-    (*cur) = calloc(1, sizeof(_UA_LL_Argument_Map));
+    (*cur) = (_UA_LL_Argument_Map *)calloc(1, sizeof(_UA_LL_Argument_Map));
     (*cur)->key = keyPtr;
     (*cur)->value = value;
 }
@@ -164,28 +168,29 @@ size_t _ua_parser_map_find(UA_Parser *parser, const char *const name) {
 void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired) {
     size_t shortNameSize, longNameSize;
     char *newShortName = NULL, *newLongName = NULL;
-    UA_Argument new = {0};
+    UA_Argument newArg;
+    memset(&newArg, 0, sizeof(UA_Argument));
 
     if (argType != UA_ARGUMENT_LONG) {
         shortNameSize = strlen(shortName) + 1;
-        newShortName = calloc(shortNameSize, sizeof(*newShortName));
+        newShortName = (char *)calloc(shortNameSize, sizeof(*newShortName));
         memcpy(newShortName, shortName, shortNameSize * sizeof(*newShortName));
         assert(shortNameSize - 1 == 1 && "Invalid short name length");
     }
 
     if (argType != UA_ARGUMENT_SHORT) {
         longNameSize = strlen(longName) + 1;
-        newLongName = calloc(longNameSize, sizeof(*newLongName));
+        newLongName = (char *)calloc(longNameSize, sizeof(*newLongName));
         memcpy(newLongName, longName, longNameSize * sizeof(*newLongName));
         assert(longNameSize - 1 > 1 && "Invalid long name length");
     }
 
-    new.type = argType;
-    new.shortName = newShortName;
-    new.longName = newLongName;
-    new.consumes = elementsCounsumed;
-    new.isRequired = isArgRequired;
-    UA_DA_APPEND(&parser->argumentStack, new);
+    newArg.type = (UA_Argument_Type)argType;
+    newArg.shortName = (char *)newShortName;
+    newArg.longName = (char *)newLongName;
+    newArg.consumes = (size_t)elementsCounsumed;
+    newArg.isRequired = (bool)isArgRequired;
+    UA_DA_APPEND(&parser->argumentStack, newArg);
 
     _ua_parser_map_add(parser, argType, newShortName, newLongName, parser->argumentStack.count - 1);
 }

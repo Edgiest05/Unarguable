@@ -5,6 +5,8 @@ EXAMPLES_PATH 	?= ../examples
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c90 -g3 -pedantic
+# CC = g++
+# CFLAGS = -Wall -Wextra -std=c++11 -g3 -pedantic
 INCLUDE = -I. -I$(SRC_PATH)
 LINK = 
 
