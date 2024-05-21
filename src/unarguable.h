@@ -1,3 +1,5 @@
+/* // * Follows convention at https://nullprogram.com/blog/2020/08/01/ */
+
 #ifndef UNARGUABLE_H
 #define UNARGUABLE_H
 
@@ -7,8 +9,17 @@
 #include <string.h>
 
 #if !__cplusplus
-#define decltype(type) void*
+#define decltype(type) void *
+#else
+extern "C" {
 #endif
+
+#define _HELPER_STR(x) #x
+#define STR(x) _HELPER_STR(x)
+
+static int _ua_iota = 0;
+#define UA_IOTA() _ua_iota++
+#define UA_ITOA_RESET() _ua_iota = 0;
 
 #define UA_ARR_LEN(array) (sizeof(array) / sizeof(array[0]))
 
@@ -27,20 +38,20 @@
         (daPtr)->items[(daPtr)->count++] = (elem);                                                                           \
     } while (0)
 
-#define UA_DA_APPEND_MANY(daPtr, new_items, new_items_count)                                           \
-    do {                                                                                               \
-        if ((daPtr)->count + new_items_count > (daPtr)->capacity) {                                    \
-            if ((daPtr)->capacity == 0) {                                                              \
-                (daPtr)->capacity = UA_DA_INIT_CAP;                                                    \
-            }                                                                                          \
-            while ((daPtr)->count + new_items_count > (daPtr)->capacity) {                             \
-                (daPtr)->capacity *= 2;                                                                \
-            }                                                                                          \
-            (daPtr)->items = (decltype((daPtr)->items))realloc((daPtr)->items, (daPtr)->capacity * sizeof(*(daPtr)->items));     \
-            assert((daPtr)->items != NULL && "Buy more RAM lol");                                      \
-        }                                                                                              \
-        memcpy((daPtr)->items + (daPtr)->count, new_items, new_items_count * sizeof(*(daPtr)->items)); \
-        (daPtr)->count += new_items_count;                                                             \
+#define UA_DA_APPEND_MANY(daPtr, new_items, new_items_count)                                                                 \
+    do {                                                                                                                     \
+        if ((daPtr)->count + new_items_count > (daPtr)->capacity) {                                                          \
+            if ((daPtr)->capacity == 0) {                                                                                    \
+                (daPtr)->capacity = UA_DA_INIT_CAP;                                                                          \
+            }                                                                                                                \
+            while ((daPtr)->count + new_items_count > (daPtr)->capacity) {                                                   \
+                (daPtr)->capacity *= 2;                                                                                      \
+            }                                                                                                                \
+            (daPtr)->items = (decltype((daPtr)->items))realloc((daPtr)->items, (daPtr)->capacity * sizeof(*(daPtr)->items)); \
+            assert((daPtr)->items != NULL && "Buy more RAM lol");                                                            \
+        }                                                                                                                    \
+        memcpy((daPtr)->items + (daPtr)->count, new_items, new_items_count * sizeof(*(daPtr)->items));                       \
+        (daPtr)->count += new_items_count;                                                                                   \
     } while (0)
 
 #define UA_DA_CLEAR(daPtr) (daPtr)->count = 0
@@ -64,8 +75,10 @@ size_t ua_hash_string(const char *const str) {
 /*  End of structures definition */
 
 #define UAAPI
+#define UA_SIMPLE_ARG_MAX_LEN 12
 
 typedef enum UA_Argument_Type {
+    UA_ARGUMENT_SIMPLE,
     UA_ARGUMENT_SHORT,
     UA_ARGUMENT_LONG,
     UA_ARGUMENT_BOTH
@@ -119,9 +132,12 @@ typedef struct UA_Parser {
 #define UA_PRINT_ARGUMENT_VALUE(argPtr, id) \
     printf("VALUE(%s) -> found: %d, consumes: %lu, length: %lu\n", (id), (argPtr)->values.isActive, (unsigned long)(argPtr)->consumes, (unsigned long)(argPtr)->values.count)
 
+UAAPI void ua_print_usage(UA_Parser *parser);
 UAAPI UA_Parser *ua_parser_create();
 UAAPI void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired);
+UAAPI void ua_parser_add_simple_argument(UA_Parser *parser);
 UAAPI UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name);
+UAAPI UA_Argument *ua_parser_get_simple_argument(UA_Parser *parser, int index);
 UAAPI bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const argv[]); /* // ! Only supports prefixed identifiers (-, --) */
 UAAPI const char *ua_parser_is_complete(const UA_Parser *parser);                               /* // TODO: Does this signature make sense? */
 
@@ -131,12 +147,17 @@ UAAPI UA_ArgValues *ua_argument_get_values(UA_Argument *argument);
 UAAPI void ua_argument_set_active(UA_Argument *argument, bool isActive);
 
 #ifdef UNARGUABLE_IMPLEMENTATION
+UAAPI void ua_print_usage(UA_Parser *parser) {
+    (void)parser;
+    printf("To be implemented\n");
+}
+
 UA_Parser *ua_parser_create() {
     return (UA_Parser *)calloc(1, sizeof(UA_Parser));
 }
 
 void _ua_parser_map_add_helper(UA_Parser *parser, const char *const keyPtr, size_t value) {
-    /*  ! Needs to be sure that the key is not already present before-hand */
+    /* // Key mustn't be already present */
     size_t idx = ua_hash_string(keyPtr) % UA_HM_BUCKET_SIZE;
     _UA_LL_Argument_Map **cur = &parser->argumentMap.buckets[idx];
     while (*cur != NULL) {
@@ -148,12 +169,28 @@ void _ua_parser_map_add_helper(UA_Parser *parser, const char *const keyPtr, size
 }
 
 void _ua_parser_map_add(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t argumentIdx) {
-    if (argType != UA_ARGUMENT_LONG) {
-        _ua_parser_map_add_helper(parser, shortName, argumentIdx);
-    }
-
-    if (argType != UA_ARGUMENT_SHORT) {
-        _ua_parser_map_add_helper(parser, longName, argumentIdx);
+    switch (argType) {
+        case UA_ARGUMENT_SIMPLE: {
+            _ua_parser_map_add_helper(parser, longName, argumentIdx);
+            break;
+        }
+        case UA_ARGUMENT_SHORT: {
+            _ua_parser_map_add_helper(parser, shortName, argumentIdx);
+            break;
+        }
+        case UA_ARGUMENT_LONG: {
+            _ua_parser_map_add_helper(parser, longName, argumentIdx);
+            break;
+        }
+        case UA_ARGUMENT_BOTH: {
+            _ua_parser_map_add_helper(parser, shortName, argumentIdx);
+            _ua_parser_map_add_helper(parser, longName, argumentIdx);
+            break;
+        }
+        default: {
+            fprintf(stderr, "Switch case not exhaustive: " STR(__LINE__));
+            exit(1);
+        }
     }
 }
 
@@ -165,20 +202,36 @@ size_t _ua_parser_map_find(UA_Parser *parser, const char *const name) {
     return (cur != NULL && strcmp(cur->key, name) == 0) ? cur->value : SIZE_MAX;
 }
 
+/*
+/// @brief Simple arguments should be defined leaving NULL both name parameters.
+/// @brief Such arguments can be accessed using their 0-indexed supply order (needs to match definition order).
+*/
 void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired) {
     size_t shortNameSize, longNameSize;
     char *newShortName = NULL, *newLongName = NULL;
+    char simpleBuffer[UA_SIMPLE_ARG_MAX_LEN] = {0};
     UA_Argument newArg;
     memset(&newArg, 0, sizeof(UA_Argument));
 
-    if (argType != UA_ARGUMENT_LONG) {
+    if (argType == UA_ARGUMENT_SIMPLE) {
+        assert(shortName == NULL && "Simple arguments can't have names");
+        assert(longName == NULL && "Simple arguments can't have names"); /* // TODO: Allow aliasing */
+        assert(elementsCounsumed == 0 && "Simple arguments can't consume other arguments");
+        snprintf(simpleBuffer, UA_SIMPLE_ARG_MAX_LEN, "%d", UA_IOTA());
+        longNameSize = strlen(simpleBuffer) + 1;
+        newLongName = (char *)calloc(longNameSize, sizeof(*newLongName));
+        memcpy(newLongName, simpleBuffer, longNameSize);
+    }
+
+    if (argType == UA_ARGUMENT_SHORT || argType == UA_ARGUMENT_BOTH) {
         shortNameSize = strlen(shortName) + 1;
         newShortName = (char *)calloc(shortNameSize, sizeof(*newShortName));
         memcpy(newShortName, shortName, shortNameSize * sizeof(*newShortName));
-        assert(shortNameSize - 1 == 1 && "Invalid short name length");
+        assert(shortNameSize - 1 == 1 && "Invalid short name length"); /* // TODO: Make use of compound also in definition */
+        assert(!('0' <= *newShortName && *newShortName <= '9') && "Numbers are not allowed");
     }
 
-    if (argType != UA_ARGUMENT_SHORT) {
+    if (argType == UA_ARGUMENT_LONG || argType == UA_ARGUMENT_BOTH) {
         longNameSize = strlen(longName) + 1;
         newLongName = (char *)calloc(longNameSize, sizeof(*newLongName));
         memcpy(newLongName, longName, longNameSize * sizeof(*newLongName));
@@ -195,9 +248,19 @@ void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const c
     _ua_parser_map_add(parser, argType, newShortName, newLongName, parser->argumentStack.count - 1);
 }
 
+void ua_parser_add_simple_argument(UA_Parser *parser) {
+    ua_parser_add_argument(parser, UA_ARGUMENT_SIMPLE, NULL, NULL, 0, true);
+}
+
 UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name) {
     size_t argIdx = _ua_parser_map_find(parser, name);
     return argIdx == SIZE_MAX ? NULL : &parser->argumentStack.items[argIdx];
+}
+
+UA_Argument *ua_parser_get_simple_argument(UA_Parser *parser, int index) {
+    char name[UA_SIMPLE_ARG_MAX_LEN] = {0};
+    snprintf(name, UA_SIMPLE_ARG_MAX_LEN, "%d", index);
+    return ua_parser_get_argument(parser, name);
 }
 
 void ua_argument_set_consumes(UA_Argument *argument, size_t consumes) {
@@ -216,19 +279,23 @@ void ua_argument_set_active(UA_Argument *argument, bool isActive) {
     ua_argument_get_values(argument)->isActive = isActive;
 }
 
-/* // ! Only supports prefixed identifiers (-, --) */
 bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const argv[]) {
     /* // TODO: Handle argument redefinition (warn or error) */
     UA_Argument *cur = NULL;
     char compoundBuffer[2] = {0};
+    char simpleBuffer[UA_SIMPLE_ARG_MAX_LEN] = {0};
 
     int i;
     size_t j, _, curStrLen;
     i = 1;
+    UA_ITOA_RESET();
     while (i < argc) {
-        curStrLen = strlen(argv[i]); /* NULL terminator is excluded */
-        if (curStrLen == 0 || argv[i][0] != '-') return false;
-        if (argv[i][1] != '-') {
+        curStrLen = strlen(argv[i]);
+        if (curStrLen == 0) continue;
+        if (argv[i][0] != '-') {
+            snprintf(simpleBuffer, UA_SIMPLE_ARG_MAX_LEN, "%d", UA_IOTA());
+            cur = ua_parser_get_argument(parser, (char *)simpleBuffer);
+        } else if (argv[i][1] != '-') {
             /* Check if compound */
             if (curStrLen > 2) {
                 for (j = 1; j < curStrLen; j++) {
@@ -252,6 +319,9 @@ bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const
             continue;
         }
         ua_argument_get_values(cur)->isActive = true;
+        if (cur->type == UA_ARGUMENT_SIMPLE) {
+            UA_DA_APPEND(ua_argument_get_values(cur), argv[i]);
+        }
         i++;
         for (_ = 0; _ < cur->consumes; _++) {
             if (i >= argc) return false;
@@ -271,13 +341,21 @@ const char *ua_parser_is_complete(const UA_Parser *parser) {
         cur = &parser->argumentStack.items[i];
         curValue = ua_argument_get_values(cur);
         if (cur->isRequired && !curValue->isActive) goto defer;
-        if (curValue->isActive && (cur->consumes != curValue->count)) goto defer;
+        if (cur->type == UA_ARGUMENT_SIMPLE) {
+            if (curValue->isActive && curValue->count != 1) goto defer;
+        } else {
+            if (curValue->isActive && (cur->consumes != curValue->count)) goto defer;
+        }
     }
     return NULL;
 
 defer:
     return (cur->type == UA_ARGUMENT_SHORT) ? cur->shortName : cur->longName;
 }
+
+#if __cplusplus
+}
+#endif
 
 #endif /* UNARGUABLE_IMPLEMENTATION */
 
