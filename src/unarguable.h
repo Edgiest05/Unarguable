@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #if !__cplusplus
 #define decltype(type) void *
@@ -199,7 +200,7 @@ size_t _ua_parser_map_find(UA_Parser *parser, const char *const name) {
     while (cur != NULL && strcmp(name, cur->key) != 0) {
         cur = cur->next;
     }
-    return (cur != NULL && strcmp(cur->key, name) == 0) ? cur->value : SIZE_MAX;
+    return (cur != NULL && strcmp(cur->key, name) == 0) ? cur->value : -1;
 }
 
 /*
@@ -207,17 +208,18 @@ size_t _ua_parser_map_find(UA_Parser *parser, const char *const name) {
 /// @brief Such arguments can be accessed using their 0-indexed supply order (needs to match definition order).
 */
 void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired) {
+    /* // TODO: Handle argument redefinition (warn or error) */
     size_t shortNameSize, longNameSize;
     char *newShortName = NULL, *newLongName = NULL;
     char simpleBuffer[UA_SIMPLE_ARG_MAX_LEN] = {0};
-    UA_Argument newArg;
+    UA_Argument newArg, *existingArg;
     memset(&newArg, 0, sizeof(UA_Argument));
 
     if (argType == UA_ARGUMENT_SIMPLE) {
         assert(shortName == NULL && "Simple arguments can't have names");
         assert(longName == NULL && "Simple arguments can't have names"); /* // TODO: Allow aliasing */
         assert(elementsCounsumed == 0 && "Simple arguments can't consume other arguments");
-        snprintf(simpleBuffer, UA_SIMPLE_ARG_MAX_LEN, "%d", UA_IOTA());
+        sprintf(simpleBuffer, "%d", UA_IOTA());
         longNameSize = strlen(simpleBuffer) + 1;
         newLongName = (char *)calloc(longNameSize, sizeof(*newLongName));
         memcpy(newLongName, simpleBuffer, longNameSize);
@@ -245,7 +247,12 @@ void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const c
     newArg.isRequired = (bool)isArgRequired;
     UA_DA_APPEND(&parser->argumentStack, newArg);
 
-    _ua_parser_map_add(parser, argType, newShortName, newLongName, parser->argumentStack.count - 1);
+    if ((existingArg = ua_parser_get_argument(parser, (argType == UA_ARGUMENT_SHORT) ? newShortName : newLongName)) == NULL) {
+        _ua_parser_map_add(parser, argType, newShortName, newLongName, parser->argumentStack.count - 1);
+    } else {
+        memcpy(existingArg, &newArg, sizeof(UA_Argument));
+        printf("[Warning] Redefinition of %s\n", (argType == UA_ARGUMENT_SHORT) ? newShortName : newLongName);
+    }
 }
 
 void ua_parser_add_simple_argument(UA_Parser *parser) {
@@ -254,12 +261,12 @@ void ua_parser_add_simple_argument(UA_Parser *parser) {
 
 UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name) {
     size_t argIdx = _ua_parser_map_find(parser, name);
-    return argIdx == SIZE_MAX ? NULL : &parser->argumentStack.items[argIdx];
+    return argIdx == -1 ? NULL : &parser->argumentStack.items[argIdx];
 }
 
 UA_Argument *ua_parser_get_simple_argument(UA_Parser *parser, int index) {
     char name[UA_SIMPLE_ARG_MAX_LEN] = {0};
-    snprintf(name, UA_SIMPLE_ARG_MAX_LEN, "%d", index);
+    sprintf(name, "%d", index);
     return ua_parser_get_argument(parser, name);
 }
 
@@ -280,7 +287,6 @@ void ua_argument_set_active(UA_Argument *argument, bool isActive) {
 }
 
 bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const argv[]) {
-    /* // TODO: Handle argument redefinition (warn or error) */
     UA_Argument *cur = NULL;
     char compoundBuffer[2] = {0};
     char simpleBuffer[UA_SIMPLE_ARG_MAX_LEN] = {0};
@@ -293,7 +299,7 @@ bool ua_parser_populate_arguments(UA_Parser *parser, int argc, const char *const
         curStrLen = strlen(argv[i]);
         if (curStrLen == 0) continue;
         if (argv[i][0] != '-') {
-            snprintf(simpleBuffer, UA_SIMPLE_ARG_MAX_LEN, "%d", UA_IOTA());
+            sprintf(simpleBuffer, "%d", UA_IOTA());
             cur = ua_parser_get_argument(parser, (char *)simpleBuffer);
         } else if (argv[i][1] != '-') {
             /* Check if compound */
