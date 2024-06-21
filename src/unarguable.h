@@ -5,9 +5,9 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #if !__cplusplus
 #define decltype(type) void *
@@ -76,7 +76,7 @@ size_t ua_hash_string(const char *const str) {
 /*  End of structures definition */
 
 #define UAAPI
-#define UA_SIMPLE_ARG_MAX_LEN 12
+#define UA_SIMPLE_ARG_MAX_LEN 1000
 
 typedef enum UA_Argument_Type {
     UA_ARGUMENT_SIMPLE,
@@ -169,7 +169,9 @@ void _ua_parser_map_add_helper(UA_Parser *parser, const char *const keyPtr, size
     (*cur)->value = value;
 }
 
-void _ua_parser_map_add(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t argumentIdx) {
+void _ua_parser_map_add(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName) {
+    size_t argumentIdx = parser->argumentStack.count-1;
+
     switch (argType) {
         case UA_ARGUMENT_SIMPLE: {
             _ua_parser_map_add_helper(parser, longName, argumentIdx);
@@ -208,9 +210,8 @@ size_t _ua_parser_map_find(UA_Parser *parser, const char *const name) {
 /// @brief Such arguments can be accessed using their 0-indexed supply order (needs to match definition order).
 */
 void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const char *const shortName, const char *const longName, size_t elementsCounsumed, bool isArgRequired) {
-    /* // TODO: Handle argument redefinition (warn or error) */
     size_t shortNameSize, longNameSize;
-    char *newShortName = NULL, *newLongName = NULL;
+    char *newShortName = NULL, *newLongName = NULL, *cur = NULL;
     char simpleBuffer[UA_SIMPLE_ARG_MAX_LEN] = {0};
     UA_Argument newArg, *existingArg;
     memset(&newArg, 0, sizeof(UA_Argument));
@@ -229,7 +230,6 @@ void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const c
         shortNameSize = strlen(shortName) + 1;
         newShortName = (char *)calloc(shortNameSize, sizeof(*newShortName));
         memcpy(newShortName, shortName, shortNameSize * sizeof(*newShortName));
-        assert(shortNameSize - 1 == 1 && "Invalid short name length"); /* // TODO: Make use of compound also in definition */
         assert(!('0' <= *newShortName && *newShortName <= '9') && "Numbers are not allowed");
     }
 
@@ -240,18 +240,27 @@ void ua_parser_add_argument(UA_Parser *parser, UA_Argument_Type argType, const c
         assert(longNameSize - 1 > 1 && "Invalid long name length");
     }
 
+    if (argType == UA_ARGUMENT_SHORT && shortNameSize - 1 > 1) {
+        memset(simpleBuffer, 0, UA_SIMPLE_ARG_MAX_LEN);
+        for (cur = newShortName; *cur; cur++) {
+            simpleBuffer[0] = *cur;
+            ua_parser_add_argument(parser, UA_ARGUMENT_SHORT, simpleBuffer, NULL, elementsCounsumed, isArgRequired);
+        }
+        return;
+    }
+
     newArg.type = (UA_Argument_Type)argType;
     newArg.shortName = (char *)newShortName;
     newArg.longName = (char *)newLongName;
     newArg.consumes = (size_t)elementsCounsumed;
     newArg.isRequired = (bool)isArgRequired;
-    UA_DA_APPEND(&parser->argumentStack, newArg);
 
-    if ((existingArg = ua_parser_get_argument(parser, (argType == UA_ARGUMENT_SHORT) ? newShortName : newLongName)) == NULL) {
-        _ua_parser_map_add(parser, argType, newShortName, newLongName, parser->argumentStack.count - 1);
+    if (((existingArg = ua_parser_get_argument(parser, newShortName)) == NULL) || (existingArg = ua_parser_get_argument(parser, newLongName)) == NULL) {
+        UA_DA_APPEND(&parser->argumentStack, newArg); /* Needs to be before */
+        _ua_parser_map_add(parser, argType, newShortName, newLongName);
     } else {
         memcpy(existingArg, &newArg, sizeof(UA_Argument));
-        printf("[Warning] Redefinition of %s\n", (argType == UA_ARGUMENT_SHORT) ? newShortName : newLongName);
+        printf("\033[40m[Warn] Redefinition of %s\033[37m\n", (argType == UA_ARGUMENT_SHORT) ? newShortName : newLongName);
     }
 }
 
@@ -260,7 +269,9 @@ void ua_parser_add_simple_argument(UA_Parser *parser) {
 }
 
 UA_Argument *ua_parser_get_argument(UA_Parser *parser, const char *const name) {
-    size_t argIdx = _ua_parser_map_find(parser, name);
+    size_t argIdx = 0;
+    if (name == NULL) return NULL;
+    argIdx = _ua_parser_map_find(parser, name);
     return argIdx == -1 ? NULL : &parser->argumentStack.items[argIdx];
 }
 
